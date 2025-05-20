@@ -165,6 +165,14 @@ impl KernelSrc {
 	}
 
 	fn rerun_if_changed_cargo(&self, cargo_toml: &Path) {
+		println!(
+			"cargo:rerun-if-changed={}/src",
+			cargo_toml
+				.parent()
+				.expect("Cargo.toml should have a parent, the project dir it is in")
+				.display()
+		);
+
 		let mut cargo = cargo();
 
 		let output = cargo
