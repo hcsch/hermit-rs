@@ -1,0 +1,13 @@
+[package]
+name = "dyn_mem"
+edition = "2024"
+
+# [dependencies]
+# rftrace = { version = "0.2", features = ["interruptsafe"] }
+# rftrace-frontend = "0.2"
+
+[target.'cfg(target_os = "hermit")'.dependencies]
+hermit = { path = "../../hermit", default-features = false, features = [
+    "balloon",
+    # "allocation-stats",
+] }

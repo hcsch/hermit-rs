@@ -1,0 +1,10 @@
+[Unit]
+RequiredBy=multi-user.target
+
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/dyn_mem
+ExecStopPost=systemctl poweroff
+
+[Install]
+WantedBy=multi-user.target

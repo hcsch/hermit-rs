@@ -1,1 +1,3 @@
 /target
+*.qcow2
+tracedir
