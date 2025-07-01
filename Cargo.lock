@@ -768,6 +768,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "dyn_mem"
+version = "0.0.0"
+dependencies = [
+ "hermit",
+]
+
+[[package]]
 name = "ecdsa"
 version = "0.16.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -132,6 +132,8 @@ impl KernelSrc {
 				"udp",
 				"vga",
 				"vsock",
+				"balloon",
+				"allocation-stats",
 			]
 			.into_iter(),
 		);

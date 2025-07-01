@@ -65,6 +65,8 @@ trace = []
 udp = []
 vga = []
 vsock = []
+balloon = []
+allocation-stats = []
 common-os = ["hermit-abi", "generic_once_cell", "libm", "spinning_top", "take-static", "talc"]
 
 [build-dependencies]
