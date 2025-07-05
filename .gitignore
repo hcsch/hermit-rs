@@ -3,6 +3,9 @@
 # rftrace output
 tracedir
 
+# measurement output
+/measurements
+
 # Nix build outputs
 /result
 /result-*
