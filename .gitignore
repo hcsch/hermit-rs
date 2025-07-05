@@ -1,3 +1,11 @@
 /target
-*.qcow2
+
+# rftrace output
 tracedir
+
+# Nix build outputs
+/result
+/result-*
+
+# VM disk images
+*.qcow2
