@@ -53,12 +53,12 @@ fn alloc_and_fill_buf(size: usize) {
 	// Talc can't realloc in-place growing to the left, only to the right
 	// i.e. reallocating 4GiB with 2GiB already allocated in not quite
 	// 8GiB of heap memory is a larger gamble than it would have to be
-	let mut buf = Vec::with_capacity(size / std::mem::size_of::<u32>());
+	let mut buf = Vec::with_capacity(size);
 
-	for i in 0..size / std::mem::size_of::<u32>() {
-		buf.push((i as u32).wrapping_pow(7));
-		if i % (REPORTING_SIZE / std::mem::size_of::<u32>()) == 0 {
-			println!("<dyn-mem> {} MiB", i / (M / std::mem::size_of::<u32>()));
+	for i in 0..size {
+		buf.push(i as u8);
+		if i % REPORTING_SIZE == 0 {
+			println!("<dyn-mem> {} MiB", i / M);
 		}
 	}
 }
