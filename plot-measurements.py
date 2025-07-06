@@ -32,11 +32,16 @@ for (kind, balloon_name), ax_row in zip(
         )
 
         measurements = pd.read_csv(f"measurements/{kind}-{balloon_name}-{n}.csv")
+        measurements = measurements.set_index(["elapsed_s", "pid"])
         # Convert RSS from kibibytes to Gibibytes
         measurements.rss = measurements.rss.astype("float64") / (1024 * 1024)
 
-        measurements.groupby("pid").plot(
-            "elapsed_s", "rss", ax=ax, xlabel="t [s]", ylabel="RSS [GiB]"
+        measurements["rss"].unstack(level="pid").plot(
+            ax=ax,
+            kind="area",
+            stacked=True,
+            xlabel="t [s]",
+            ylabel="RSS [GiB]",
         )
 
 plt.savefig(f"measurements/plot.svg")
