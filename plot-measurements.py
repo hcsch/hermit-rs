@@ -43,5 +43,6 @@ for (kind, balloon_name), ax_row in zip(
             xlabel="t [s]",
             ylabel="RSS [GiB]",
         )
+        ax.get_legend().remove()
 
 plt.savefig(f"measurements/plot.svg")
