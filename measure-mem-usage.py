@@ -4,6 +4,7 @@ import os
 import subprocess
 import shutil
 import csv
+from contextlib import contextmanager
 from sys import stderr
 from tempfile import TemporaryDirectory
 from pathlib import Path
@@ -96,6 +97,30 @@ def start_hermit_vm(
 StartFn = Callable[[Path, Path, int, bool], subprocess.Popen[bytes]]
 
 
+@contextmanager
+def start_vm_processes(
+    start_fn: StartFn,
+    num_parallel: int,
+    qemu_path: Path,
+    tmp_dir: Path,
+    with_balloon: bool,
+):
+    vm_processes: List[subprocess.Popen[bytes]] = []
+    try:
+        vm_processes = [
+            start_fn(qemu_path, tmp_dir, i, with_balloon) for i in range(num_parallel)
+        ]
+
+        yield vm_processes
+    finally:
+        for process in vm_processes:
+            if process.poll() is None:
+                print(
+                    f"Process {process.args} was left running after run scope, killing..."
+                )
+                process.kill()
+
+
 def run_measurement(
     qemu_path: Path,
     ps_path: Path,
@@ -109,42 +134,41 @@ def run_measurement(
 
     start = datetime.now(timezone.utc).timestamp()
 
-    vm_processes = [
-        start_fn(qemu_path, tmp_dir, i, with_balloon) for i in range(num_parallel)
-    ]
+    with start_vm_processes(
+        start_fn, num_parallel, qemu_path, tmp_dir, with_balloon
+    ) as vm_processes:
+        measurements: List[Tuple[Any, ...]] = []
 
-    measurements: List[Tuple[Any, ...]] = []
-
-    while any(map(lambda p: p.poll() is None, vm_processes)):
-        result = subprocess.run(
-            [
-                ps_path,
-                "--pid",
-                ",".join(map(lambda p: f"{p.pid}", vm_processes)),
-                "-o",
-                ",".join(PS_KEYS),
-            ],
-            capture_output=True,
-        )
-
-        now = datetime.now(timezone.utc).timestamp() - start
-
-        if result.returncode != 0:
-            print(result, file=stderr)
-            raise Exception("ps failed")
-
-        measurements.extend(
-            (
-                (now, *(int(column) for column in line.split()))
-                for line in result.stdout.splitlines()[1:]
+        while any(map(lambda p: p.poll() is None, vm_processes)):
+            result = subprocess.run(
+                [
+                    ps_path,
+                    "--pid",
+                    ",".join(map(lambda p: f"{p.pid}", vm_processes)),
+                    "-o",
+                    ",".join(PS_KEYS),
+                ],
+                capture_output=True,
             )
-        )
 
-        print(result.stdout, file=stderr)
+            now = datetime.now(timezone.utc).timestamp() - start
 
-    if any(map(lambda p: p.returncode != success_returncode, vm_processes)):
-        print(vm_processes, file=stderr)
-        raise Exception("a VM process failed")
+            if result.returncode != 0:
+                print(result, file=stderr)
+                raise Exception("ps failed")
+
+            measurements.extend(
+                (
+                    (now, *(int(column) for column in line.split()))
+                    for line in result.stdout.splitlines()[1:]
+                )
+            )
+
+            print(result.stdout, file=stderr)
+
+        if any(map(lambda p: p.returncode != success_returncode, vm_processes)):
+            print(vm_processes, file=stderr)
+            raise Exception("a VM process failed")
 
     return measurements
 
