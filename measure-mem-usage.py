@@ -3,12 +3,12 @@
 import os
 import subprocess
 import shutil
-import csv
+import pandas as pd
 from contextlib import contextmanager
 from sys import stderr
 from tempfile import TemporaryDirectory
 from pathlib import Path
-from typing import Any, Callable, List, Tuple
+from typing import Callable, List, Optional
 from datetime import datetime, timezone
 
 LINUX_VM_IMAGE = "result/nixos.qcow2"
@@ -94,6 +94,18 @@ def start_hermit_vm(
     return process
 
 
+def parse_ps_output(now: float, ps_stdout: bytes) -> pd.DataFrame:
+    # strip column header line
+    lines = ps_stdout.splitlines()[1:]
+    assert len(lines) >= 1
+
+    return pd.DataFrame.from_records(
+        [(now, *(int(column) for column in line.split())) for line in lines],
+        columns=["elapsed_s", *PS_KEYS],
+        index=["elapsed_s", "pid"],
+    )
+
+
 StartFn = Callable[[Path, Path, int, bool], subprocess.Popen[bytes]]
 
 
@@ -129,7 +141,7 @@ def run_measurement(
     start_fn: StartFn,
     success_returncode: int,
     with_balloon: bool,
-) -> List[Tuple[Any, ...]]:
+) -> pd.DataFrame:
     print(f"Running measurement with {num_parallel} VMs")
 
     start = datetime.now(timezone.utc).timestamp()
@@ -137,7 +149,7 @@ def run_measurement(
     with start_vm_processes(
         start_fn, num_parallel, qemu_path, tmp_dir, with_balloon
     ) as vm_processes:
-        measurements: List[Tuple[Any, ...]] = []
+        measurements: Optional[pd.DataFrame] = None
 
         while any(map(lambda p: p.poll() is None, vm_processes)):
             result = subprocess.run(
@@ -157,18 +169,20 @@ def run_measurement(
                 print(result, file=stderr)
                 raise Exception("ps failed")
 
-            measurements.extend(
-                (
-                    (now, *(int(column) for column in line.split()))
-                    for line in result.stdout.splitlines()[1:]
+            if measurements is None:
+                measurements = parse_ps_output(now, result.stdout)
+            else:
+                measurements = pd.concat(
+                    [measurements, parse_ps_output(now, result.stdout)]
                 )
-            )
 
             print(result.stdout, file=stderr)
 
         if any(map(lambda p: p.returncode != success_returncode, vm_processes)):
             print(vm_processes, file=stderr)
             raise Exception("a VM process failed")
+
+    assert measurements is not None
 
     return measurements
 
@@ -209,14 +223,7 @@ def main():
                         with_balloon,
                     )
 
-                    with open(
-                        f"measurements/{name}-{balloon_name}-{n}.csv",
-                        "w",
-                        encoding="utf-8",
-                    ) as f:
-                        writer = csv.writer(f)
-                        writer.writerow(["elapsed_s"] + PS_KEYS)
-                        writer.writerows(measurements)
+                    measurements.to_csv(f"measurements/{name}-{balloon_name}-{n}.csv")
                 print(f"Done running measurement for {n} VMs", file=stderr)
             print(f"Done running measurements {balloon_name}", file=stderr)
         print(f"Done running {name} measurements", file=stderr)
