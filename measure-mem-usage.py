@@ -4,17 +4,18 @@ import os
 import subprocess
 import shutil
 import pandas as pd
-from contextlib import contextmanager
 from sys import stderr
 from tempfile import TemporaryDirectory
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable, Optional
 from datetime import datetime, timezone
 
 LINUX_VM_IMAGE = "result/nixos.qcow2"
 
 HERMIT_LOADER_EXECUTABLE = "../loader/target/release/hermit-loader-x86_64"
 HERMIT_EXECUTABLE = "target/x86_64-unknown-hermit/release/dyn_mem"
+
+AMP_EXECUTABLE = "target/release/artificial-mem-pressure"
 
 QEMU_COMMON_ARGS = [
     "-enable-kvm",
@@ -109,30 +110,6 @@ def parse_ps_output(now: float, ps_stdout: bytes) -> pd.DataFrame:
 StartFn = Callable[[Path, Path, int, bool], subprocess.Popen[bytes]]
 
 
-@contextmanager
-def start_vm_processes(
-    start_fn: StartFn,
-    num_parallel: int,
-    qemu_path: Path,
-    tmp_dir: Path,
-    with_balloon: bool,
-):
-    vm_processes: List[subprocess.Popen[bytes]] = []
-    try:
-        vm_processes = [
-            start_fn(qemu_path, tmp_dir, i, with_balloon) for i in range(num_parallel)
-        ]
-
-        yield vm_processes
-    finally:
-        for process in vm_processes:
-            if process.poll() is None:
-                print(
-                    f"Process {process.args} was left running after run scope, killing..."
-                )
-                process.kill()
-
-
 def run_measurement(
     qemu_path: Path,
     ps_path: Path,
@@ -141,18 +118,36 @@ def run_measurement(
     start_fn: StartFn,
     success_returncode: int,
     with_balloon: bool,
+    with_amp: bool,
 ) -> pd.DataFrame:
     print(f"Running measurement with {num_parallel} VMs")
 
     start = datetime.now(timezone.utc).timestamp()
 
-    with start_vm_processes(
-        start_fn, num_parallel, qemu_path, tmp_dir, with_balloon
-    ) as vm_processes:
+    vm_processes = []
+
+    amp_process: Optional[subprocess.Popen[bytes]] = None
+
+    try:
         measurements: Optional[pd.DataFrame] = None
 
+        vm_processes = [
+            start_fn(qemu_path, tmp_dir, i, with_balloon) for i in range(num_parallel)
+        ]
+
         while any(map(lambda p: p.poll() is None, vm_processes)):
-            result = subprocess.run(
+            now = datetime.now(timezone.utc).timestamp() - start
+
+            if with_amp and (amp_process is None or amp_process.poll() is not None):
+                if amp_process is not None and amp_process.returncode != 0:
+                    raise Exception(
+                        f"Artificial memory pressure process failed with non-zero exit code {amp_process.returncode}"
+                    )
+
+                amp_process = subprocess.Popen([AMP_EXECUTABLE])
+
+            # Run ps and artificial-mem-pressure concurrently
+            ps_process = subprocess.Popen(
                 [
                     ps_path,
                     "--pid",
@@ -160,27 +155,40 @@ def run_measurement(
                     "-o",
                     ",".join(PS_KEYS),
                 ],
-                capture_output=True,
+                stdout=subprocess.PIPE,
             )
 
-            now = datetime.now(timezone.utc).timestamp() - start
-
-            if result.returncode != 0:
-                print(result, file=stderr)
+            ps_stdout, _ = ps_process.communicate(timeout=1)
+            if ps_process.returncode != 0:
+                print(
+                    f"ps exited with non-zero exit code {ps_process.returncode}",
+                    file=stderr,
+                )
                 raise Exception("ps failed")
 
+            print(ps_stdout, file=stderr)
+
             if measurements is None:
-                measurements = parse_ps_output(now, result.stdout)
+                measurements = parse_ps_output(now, ps_stdout)
             else:
                 measurements = pd.concat(
-                    [measurements, parse_ps_output(now, result.stdout)]
+                    [measurements, parse_ps_output(now, ps_stdout)]
                 )
-
-            print(result.stdout, file=stderr)
 
         if any(map(lambda p: p.returncode != success_returncode, vm_processes)):
             print(vm_processes, file=stderr)
             raise Exception("a VM process failed")
+    finally:
+        processes_for_cleanup = vm_processes
+        if amp_process is not None:
+            processes_for_cleanup.append(amp_process)
+
+        for process in processes_for_cleanup:
+            if process.poll() is None:
+                print(
+                    f"Process {process.args} was left running after run scope, killing..."
+                )
+                process.kill()
 
     assert measurements is not None
 
@@ -210,21 +218,30 @@ def main():
             (True, "with-balloon"),
         ]:
             print(f"Running measurements {balloon_name}...", file=stderr)
-            for n in CONFIGS_NUM_PARALLEL:
-                print(f"Running measurement for {n} VMs...", file=stderr)
-                with TemporaryDirectory(suffix="mem-usage-linux") as tmp_dir:
-                    measurements = run_measurement(
-                        qemu_path,
-                        ps_path,
-                        Path(tmp_dir),
-                        n,
-                        start_fn,
-                        success_returncode,
-                        with_balloon,
-                    )
+            for with_amp, amp_name in [
+                (False, "without-amp"),
+                (True, "with-amp"),
+            ]:
+                print(f"Running measurements {amp_name}...", file=stderr)
+                for n in CONFIGS_NUM_PARALLEL:
+                    print(f"Running measurement for {n} VMs...", file=stderr)
+                    with TemporaryDirectory(suffix="mem-usage-linux") as tmp_dir:
+                        measurements = run_measurement(
+                            qemu_path,
+                            ps_path,
+                            Path(tmp_dir),
+                            n,
+                            start_fn,
+                            success_returncode,
+                            with_balloon,
+                            with_amp,
+                        )
 
-                    measurements.to_csv(f"measurements/{name}-{balloon_name}-{n}.csv")
-                print(f"Done running measurement for {n} VMs", file=stderr)
+                        measurements.to_csv(
+                            f"measurements/{name}-{balloon_name}-{amp_name}-{n}.csv"
+                        )
+                    print(f"Done running measurement for {n} VMs", file=stderr)
+                print(f"Done running measurements {amp_name}", file=stderr)
             print(f"Done running measurements {balloon_name}", file=stderr)
         print(f"Done running {name} measurements", file=stderr)
 
