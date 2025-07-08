@@ -28,7 +28,7 @@ members = [
     "examples/hermit-wasm",
     "examples/vsock",
     "hermit",
-    "hermit-abi",
+    "hermit-abi", "artificial-mem-pressure",
 ]
 
 [patch.crates-io]
