@@ -52,7 +52,7 @@ let
     outputHashAlgo = "sha256";
     outputHashMode = "recursive";
     # Update hash when Cargo.toml/Cargo.lock files change
-    outputHash = "sha256-cjmAkTXLL5KsXRb7RSSr3Ezi/nmDzcdF8MHaee4Y/3I=";
+    outputHash = "sha256-euuvHxel2KXdqP47ZBl/Z8c2fkFjgEKY1z8YYP0FLKc=";
   };
 in
 rustPlatform.buildRustPackage {
