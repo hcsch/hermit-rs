@@ -2,7 +2,8 @@
   lib,
   stdenv,
   cacert,
-  rustPlatform,
+  buildRustPackage,
+  cargo,
   clang,
   llvmPackages,
 }:
@@ -23,7 +24,7 @@ let
 
     nativeBuildInputs = [
       cacert
-      rustPlatform.rust.cargo
+      cargo
     ];
 
     dontConfigure = true;
@@ -55,7 +56,7 @@ let
     outputHash = "sha256-euuvHxel2KXdqP47ZBl/Z8c2fkFjgEKY1z8YYP0FLKc=";
   };
 in
-rustPlatform.buildRustPackage {
+buildRustPackage {
   inherit pname version src;
 
   postPatch = ''
