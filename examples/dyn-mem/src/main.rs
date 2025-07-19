@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[cfg(target_os = "hermit")]
 use hermit as _;
@@ -17,6 +17,9 @@ const SLEEP_DURATION: Duration = Duration::from_secs(2);
 fn main() {
 	// let events = rftrace::init(1001, true);
 	// rftrace::enable();
+
+	let start = Instant::now();
+	eprintln!("<dyn-mem> start");
 
 	{
 		println!("<dyn-mem> waiting {SLEEP_DURATION:?} before allocation");
@@ -45,6 +48,13 @@ fn main() {
 		println!("<dyn-mem> waiting {SLEEP_DURATION:?} before deallocation");
 		std::thread::sleep(SLEEP_DURATION);
 	}
+
+	let end = Instant::now();
+
+	eprintln!(
+		"<dyn-mem> end -- {{elapsed: {}}}",
+		end.duration_since(start).as_secs_f64()
+	);
 
 	// rftrace::dump_full_uftrace(events, "/tracedir", "dyn-mem").expect("Saving trace failed");
 }
