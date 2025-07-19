@@ -3,7 +3,9 @@
 import os
 import subprocess
 import shutil
+import re
 import pandas as pd
+from dataclasses import dataclass
 from sys import stderr
 from tempfile import TemporaryDirectory
 from pathlib import Path
@@ -67,7 +69,7 @@ def start_linux_vm(
             "-drive",
             f"file={image_file}",
         ],
-        stdout=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
     )
 
     print(f"Started Linux VM with pid {process.pid}", file=stderr)
@@ -93,7 +95,7 @@ def start_hermit_vm(
             "-initrd",
             HERMIT_EXECUTABLE,
         ],
-        stdout=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
     )
 
     print(f"Started Hermit VM with pid {process.pid}", file=stderr)
@@ -113,7 +115,25 @@ def parse_ps_output(now: float, ps_stdout: bytes) -> pd.DataFrame:
     )
 
 
+def parse_vm_output(pid: int, vm_stdout: bytes) -> pd.DataFrame:
+    # strip column header line
+    match = re.search(b"<dyn-mem> end -- \\{elapsed: ([^}]+)\\}", vm_stdout)
+    assert match is not None
+
+    return pd.DataFrame.from_records(
+        [(pid, float(match.group(1)))],
+        columns=["pid", "workload_runtime_s"],
+        index="pid",
+    )
+
+
 StartFn = Callable[[Path, Path, int, bool], subprocess.Popen[bytes]]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MeasurementResult:
+    measurements: pd.DataFrame
+    timings: pd.DataFrame
 
 
 def run_measurement(
@@ -125,7 +145,7 @@ def run_measurement(
     success_returncode: int,
     with_balloon: bool,
     with_amp: bool,
-) -> pd.DataFrame:
+) -> MeasurementResult:
     print(f"Running measurement with {num_parallel} VMs")
 
     start = datetime.now(timezone.utc).timestamp()
@@ -181,9 +201,24 @@ def run_measurement(
                     [measurements, parse_ps_output(now, ps_stdout)]
                 )
 
-        if any(map(lambda p: p.returncode != success_returncode, vm_processes)):
-            print(vm_processes, file=stderr)
-            raise Exception("a VM process failed")
+        timings: Optional[pd.DataFrame] = None
+        for vm_process in vm_processes:
+            vm_stdout, _ = vm_process.communicate(timeout=1)
+            if vm_process.returncode != success_returncode:
+                print(
+                    f"ps exited with non-success (!={success_returncode}) exit code {vm_process.returncode}",
+                    file=stderr,
+                )
+                raise Exception("a VM process failed")
+
+            print(vm_stdout, file=stderr)
+
+            if timings is None:
+                timings = parse_vm_output(vm_process.pid, vm_stdout)
+            else:
+                timings = pd.concat(
+                    [timings, parse_vm_output(vm_process.pid, vm_stdout)]
+                )
     finally:
         processes_for_cleanup = vm_processes
         if amp_process is not None:
@@ -197,8 +232,9 @@ def run_measurement(
                 process.kill()
 
     assert measurements is not None
+    assert timings is not None
 
-    return measurements
+    return MeasurementResult(measurements=measurements, timings=timings)
 
 
 def main():
@@ -232,7 +268,7 @@ def main():
                 for n in CONFIGS_NUM_PARALLEL:
                     print(f"Running measurement for {n} VMs...", file=stderr)
                     with TemporaryDirectory(suffix="mem-usage-linux") as tmp_dir:
-                        measurements = run_measurement(
+                        result = run_measurement(
                             qemu_path,
                             ps_path,
                             Path(tmp_dir),
@@ -243,8 +279,11 @@ def main():
                             with_amp,
                         )
 
-                        measurements.to_csv(
-                            f"measurements/{name}-{balloon_name}-{amp_name}-{n}.csv"
+                        result.measurements.to_csv(
+                            f"measurements/{name}-{balloon_name}-{amp_name}-{n}-measurements.csv"
+                        )
+                        result.timings.to_csv(
+                            f"measurements/{name}-{balloon_name}-{amp_name}-{n}-timings.csv"
                         )
                     print(f"Done running measurement for {n} VMs", file=stderr)
                 print(f"Done running measurements {amp_name}", file=stderr)
