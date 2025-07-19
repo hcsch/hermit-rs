@@ -29,7 +29,7 @@ fn main() {
 		alloc_and_fill_buf(INITIAL_ALLOC_SIZE);
 
 		println!("<dyn-mem> waiting {SLEEP_DURATION:?} before deallocation");
-		std::thread::sleep(Duration::from_secs(2));
+		std::thread::sleep(SLEEP_DURATION);
 	}
 
 	for _ in 0..3 {
