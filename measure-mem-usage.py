@@ -38,6 +38,11 @@ QEMU_HERMIT_ARGS = [
     "-device",
     "isa-debug-exit,iobase=0xf4,iosize=0x04",
 ]
+QEMU_LINUX_ARGS = [
+    # Another serial device for /dev/ttyS1 which we tell Linux to open a console on
+    # We don't really want the output. We just want Linux to also log events to be fair.
+    "-serial null",
+]
 
 PS_KEYS = ["pid", "uss", "rss", "pss", "min_flt", "maj_flt", "oom", "oomadj"]
 
@@ -57,6 +62,7 @@ def start_linux_vm(
         [
             qemu_path,
             *QEMU_COMMON_ARGS,
+            *QEMU_LINUX_ARGS,
             *(QEMU_BALLOON_ARGS if with_balloon else []),
             "-drive",
             f"file={image_file}",

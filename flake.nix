@@ -65,7 +65,7 @@
                 "virtio_rng"
               ];
 
-              boot.kernelParams = [ "console=ttyS0" ];
+              boot.kernelParams = [ "console=ttyS1" ];
               boot.loader.grub = {
                 device = "/dev/vda";
                 timeoutStyle = "hidden";
@@ -91,6 +91,9 @@
                   Type = "exec";
                   ExecStart = "${lib.getBin dyn-mem}/bin/dyn_mem";
                   ExecStopPost = "systemctl poweroff";
+                  StandardOutput = "tty";
+                  StandardError = "inherit";
+                  TTYPath = "/dev/ttyS0";
                 };
               };
             }
