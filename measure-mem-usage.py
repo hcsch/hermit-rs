@@ -25,7 +25,8 @@ QEMU_COMMON_ARGS = [
     "1",
     "-m",
     "6G",
-    "-nographic",
+    "-display",
+    "none",
     "-serial",
     "stdio",
 ]
