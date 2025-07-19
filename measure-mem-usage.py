@@ -19,6 +19,8 @@ HERMIT_EXECUTABLE = "target/x86_64-unknown-hermit/release/dyn_mem"
 
 AMP_EXECUTABLE = "target/release/artificial-mem-pressure"
 
+NICENESS = 10
+
 QEMU_COMMON_ARGS = [
     "-enable-kvm",
     "-cpu",
@@ -52,6 +54,8 @@ CONFIGS_NUM_PARALLEL = [1, 2, 4]
 
 
 def start_linux_vm(
+    nice_path: Path,
+    taskset_path: Path,
     qemu_path: Path,
     tmp_dir: Path,
     unique_id: int,
@@ -62,6 +66,12 @@ def start_linux_vm(
 
     process = subprocess.Popen(
         [
+            nice_path,
+            "-n",
+            str(NICENESS),
+            taskset_path,
+            "-c",
+            f"{1 + unique_id}",
             qemu_path,
             *QEMU_COMMON_ARGS,
             *QEMU_LINUX_ARGS,
@@ -78,6 +88,8 @@ def start_linux_vm(
 
 
 def start_hermit_vm(
+    nice_path: Path,
+    taskset_path: Path,
     qemu_path: Path,
     tmp_dir: Path,
     unique_id: int,
@@ -86,6 +98,12 @@ def start_hermit_vm(
 
     process = subprocess.Popen(
         [
+            nice_path,
+            "-n",
+            str(NICENESS),
+            taskset_path,
+            "-c",
+            f"{1 + unique_id}",
             qemu_path,
             *QEMU_COMMON_ARGS,
             *QEMU_HERMIT_ARGS,
@@ -127,7 +145,7 @@ def parse_vm_output(pid: int, vm_stdout: bytes) -> pd.DataFrame:
     )
 
 
-StartFn = Callable[[Path, Path, int, bool], subprocess.Popen[bytes]]
+StartFn = Callable[[Path, Path, Path, Path, int, bool], subprocess.Popen[bytes]]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -137,6 +155,8 @@ class MeasurementResult:
 
 
 def run_measurement(
+    nice_path: Path,
+    taskset_path: Path,
     qemu_path: Path,
     ps_path: Path,
     tmp_dir: Path,
@@ -158,7 +178,8 @@ def run_measurement(
         measurements: Optional[pd.DataFrame] = None
 
         vm_processes = [
-            start_fn(qemu_path, tmp_dir, i, with_balloon) for i in range(num_parallel)
+            start_fn(nice_path, taskset_path, qemu_path, tmp_dir, i, with_balloon)
+            for i in range(num_parallel)
         ]
 
         while any(map(lambda p: p.poll() is None, vm_processes)):
@@ -238,6 +259,16 @@ def run_measurement(
 
 
 def main():
+    nice_path = shutil.which("nice")
+    if nice_path is None:
+        raise Exception("Could not find nice")
+    nice_path = Path(nice_path)
+
+    taskset_path = shutil.which("taskset")
+    if taskset_path is None:
+        raise Exception("Could not find taskset")
+    taskset_path = Path(taskset_path)
+
     qemu_path = shutil.which("qemu-system-x86_64")
     if qemu_path is None:
         raise Exception("Could not find qemu-system-x86_64")
@@ -269,6 +300,8 @@ def main():
                     print(f"Running measurement for {n} VMs...", file=stderr)
                     with TemporaryDirectory(suffix="mem-usage-linux") as tmp_dir:
                         result = run_measurement(
+                            nice_path,
+                            taskset_path,
                             qemu_path,
                             ps_path,
                             Path(tmp_dir),
