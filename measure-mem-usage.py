@@ -214,8 +214,6 @@ def run_measurement(
                 )
                 raise Exception("ps failed")
 
-            print(ps_stdout, file=stderr)
-
             if measurements is None:
                 measurements = parse_ps_output(now, ps_stdout)
             else:
