@@ -45,7 +45,8 @@ QEMU_HERMIT_ARGS = [
 QEMU_LINUX_ARGS = [
     # Another serial device for /dev/ttyS1 which we tell Linux to open a console on
     # We don't really want the output. We just want Linux to also log events to be fair.
-    "-serial null",
+    "-serial",
+    "null",
 ]
 
 PS_KEYS = ["pid", "uss", "rss", "pss", "min_flt", "maj_flt", "oom", "oomadj"]
