@@ -233,14 +233,14 @@ def run_measurement(
                 )
                 raise Exception("a VM process failed")
 
-            print(vm_stdout, file=stderr)
+            vm_timing = parse_vm_output(vm_process.pid, vm_stdout)
+
+            print(vm_timing)
 
             if timings is None:
-                timings = parse_vm_output(vm_process.pid, vm_stdout)
+                timings = vm_timing
             else:
-                timings = pd.concat(
-                    [timings, parse_vm_output(vm_process.pid, vm_stdout)]
-                )
+                timings = pd.concat([timings, vm_timing])
     finally:
         processes_for_cleanup = vm_processes
         if amp_process is not None:
