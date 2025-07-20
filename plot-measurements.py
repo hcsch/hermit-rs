@@ -31,7 +31,7 @@ for (kind, balloon_name, amp_name), ax_row in zip(
         )
 
         measurements = pd.read_csv(
-            f"measurements/{kind}-{balloon_name}-{amp_name}-{n}.csv"
+            f"measurements/{kind}-{balloon_name}-{amp_name}-{n}-measurements.csv"
         )
         measurements = measurements.set_index(["elapsed_s", "pid"])
         # Convert RSS from kibibytes to Gibibytes
@@ -44,7 +44,45 @@ for (kind, balloon_name, amp_name), ax_row in zip(
             xlabel="t [s]",
             ylabel="RSS [GiB]",
         )
+
         ax.get_legend().remove()
 
 fig.tight_layout()
 fig.savefig(f"measurements/plot.svg")
+
+
+fig, ax_grid = plt.subplots(
+    figsize=(12, 12),
+    nrows=len(CONFIGS_KIND) * len(CONFIGS_BALLOON) * len(CONFIGS_AMP),
+    ncols=len(CONFIGS_NUM_PARALLEL),
+    sharex=True,
+)
+
+for (kind, balloon_name, amp_name), ax_row in zip(
+    itertools.product(CONFIGS_KIND, CONFIGS_BALLOON, CONFIGS_AMP),
+    ax_grid,
+):
+    for n, ax in zip(CONFIGS_NUM_PARALLEL, ax_row):
+        ax.set_title(
+            f"{kind} ×{n} {balloon_name} {amp_name}",
+            loc="left",
+            fontstyle="oblique",
+            fontsize="medium",
+        )
+
+        timings = pd.read_csv(
+            f"measurements/{kind}-{balloon_name}-{amp_name}-{n}-timings.csv"
+        )
+        timings.pid = timings.pid.astype("str")
+        timings = timings.set_index("pid")
+
+        ax.barh(
+            y=timings.index,
+            width=timings["workload_runtime_s"],
+        )
+
+        ax.set_xlabel("t [s]")
+
+
+fig.tight_layout()
+fig.savefig(f"measurements/timings.svg")

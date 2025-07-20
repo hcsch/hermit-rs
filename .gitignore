@@ -6,6 +6,7 @@ tracedir
 # measurement output
 /measurements/*
 !/measurements/plot.svg
+!/measurements/timings.svg
 
 # Nix build outputs
 /result
