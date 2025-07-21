@@ -26,8 +26,8 @@ fig, ax_grid = plt.subplots(
     sharex=True,
 )
 
-for (kind, balloon_name, amp_name), ax_row in zip(
-    itertools.product(CONFIGS_KIND, CONFIGS_BALLOON, CONFIGS_AMP),
+for (amp_name, kind, balloon_name), ax_row in zip(
+    itertools.product(CONFIGS_AMP, CONFIGS_KIND, CONFIGS_BALLOON),
     ax_grid,
 ):
     for n, ax in zip(CONFIGS_NUM_PARALLEL, ax_row):
