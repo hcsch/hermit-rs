@@ -5,6 +5,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import itertools
 
+# Output editable text to the SVGs instead of text rendered to path elements
+plt.rcParams["svg.fonttype"] = "none"
+plt.rcParams["font.family"] = [
+    "NewComputerModernSans10",
+    "CMU Sans Serif",
+    "sans-serif",
+]
+
 CONFIGS_KIND = ["hermit", "linux"]
 CONFIGS_BALLOON = ["without-balloon", "with-balloon"]
 CONFIGS_AMP = ["without-amp", "with-amp"]
