@@ -51,6 +51,7 @@ for (kind, balloon_name, amp_name), ax_row in zip(
             stacked=True,
             xlabel="t [s]",
             ylabel="RSS [GiB]",
+            grid=True,
         )
 
         ax.get_legend().remove()
