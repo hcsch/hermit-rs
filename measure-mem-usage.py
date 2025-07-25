@@ -51,8 +51,6 @@ QEMU_LINUX_ARGS = [
 
 PS_KEYS = ["pid", "uss", "rss", "pss", "min_flt", "maj_flt", "oom", "oomadj"]
 
-CONFIGS_NUM_PARALLEL = [1, 2, 4]
-
 
 @dataclass(frozen=True)
 class Paths:
@@ -270,32 +268,31 @@ def run_measurement(
     return MeasurementResult(measurements=measurements, timings=timings)
 
 
+CONFIGS_NUM_PARALLEL = [1, 2, 4]
+CONFIGS_KIND = {"hermit": (start_hermit_vm, 3), "linux": (start_linux_vm, 0)}
+CONFIGS_BALLOON = {"without-balloon": False, "with-balloon": True}
+CONFIGS_AMP = {"without-amp": False, "with-amp": True}
+
+
 def measure_qualitative_overview(
     paths: Paths,
 ):
+    os.makedirs("measurements/qualitative", exist_ok=True)
+
     print(f"Running qualitative overview measurements...", file=stderr)
-    for start_fn, name, success_returncode in [
-        (start_hermit_vm, "hermit", 3),
-        (start_linux_vm, "linux", 0),
-    ]:
-        print(f"Running {name} measurements...", file=stderr)
-        for with_balloon, balloon_name in [
-            (False, "without-balloon"),
-            (True, "with-balloon"),
-        ]:
+    for kind_name, (start_fn, success_returncode) in CONFIGS_KIND.items():
+        print(f"Running {kind_name} measurements...", file=stderr)
+        for balloon_name, with_balloon in CONFIGS_BALLOON.items():
             print(f"Running measurements {balloon_name}...", file=stderr)
-            for with_amp, amp_name in [
-                (False, "without-amp"),
-                (True, "with-amp"),
-            ]:
+            for amp_name, with_amp in CONFIGS_AMP.items():
                 print(f"Running measurements {amp_name}...", file=stderr)
-                for n in CONFIGS_NUM_PARALLEL:
-                    print(f"Running measurement for {n} VMs...", file=stderr)
+                for num_parallel in CONFIGS_NUM_PARALLEL:
+                    print(f"Running measurement for {num_parallel} VMs...", file=stderr)
                     with TemporaryDirectory(suffix="mem-usage-linux") as tmp_dir:
                         result = run_measurement(
                             paths,
                             Path(tmp_dir),
-                            n,
+                            num_parallel,
                             start_fn,
                             success_returncode,
                             with_balloon,
@@ -303,23 +300,80 @@ def measure_qualitative_overview(
                         )
 
                         result.measurements.to_csv(
-                            f"measurements/{name}-{balloon_name}-{amp_name}-{n}-measurements.csv"
+                            f"measurements/qualitative/{kind_name}-{balloon_name}-{amp_name}-{num_parallel}-measurements.csv"
                         )
                         result.timings.to_csv(
-                            f"measurements/{name}-{balloon_name}-{amp_name}-{n}-timings.csv"
+                            f"measurements/qualitative/{kind_name}-{balloon_name}-{amp_name}-{num_parallel}-timings.csv"
                         )
-                    print(f"Done running measurement for {n} VMs", file=stderr)
+                    print(
+                        f"Done running measurement for {num_parallel} VMs", file=stderr
+                    )
                 print(f"Done running measurements {amp_name}", file=stderr)
             print(f"Done running measurements {balloon_name}", file=stderr)
-        print(f"Done running {name} measurements", file=stderr)
+        print(f"Done running {kind_name} measurements", file=stderr)
     print(f"Done running qualitative overview measurements", file=stderr)
+
+
+CONFIGS_FOR_QUANTITATIVE_MEASUREMENTS = [
+    ("hermit", "without-balloon", "without-amp", 1),
+    ("hermit", "with-balloon", "without-amp", 1),
+    ("linux", "without-balloon", "without-amp", 1),
+    ("linux", "with-balloon", "without-amp", 1),
+    ("hermit", "without-balloon", "with-amp", 1),
+    ("hermit", "with-balloon", "with-amp", 1),
+    ("linux", "without-balloon", "with-amp", 1),
+    ("linux", "with-balloon", "with-amp", 1),
+]
+QUANTITATIVE_NUM_SAMPLES = 20
+
+
+def measure_quantitative_details(paths: Paths):
+    os.makedirs("measurements/quantitative", exist_ok=True)
+
+    print(f"Running quantitative detail measurements...", file=stderr)
+    for (
+        kind_name,
+        balloon_name,
+        amp_name,
+        num_parallel,
+    ) in CONFIGS_FOR_QUANTITATIVE_MEASUREMENTS:
+        start_fn, success_returncode = CONFIGS_KIND[kind_name]
+        with_balloon = CONFIGS_BALLOON[balloon_name]
+        with_amp = CONFIGS_AMP[amp_name]
+
+        print(
+            f"Running measurements with config {{{kind_name=}, {balloon_name=}, {amp_name=}, {num_parallel=}}}...",
+            file=stderr,
+        )
+        for i in range(QUANTITATIVE_NUM_SAMPLES):
+            with TemporaryDirectory(suffix="mem-usage-linux") as tmp_dir:
+                result = run_measurement(
+                    paths,
+                    Path(tmp_dir),
+                    num_parallel,
+                    start_fn,
+                    success_returncode,
+                    with_balloon,
+                    with_amp,
+                )
+
+                result.measurements.to_csv(
+                    f"measurements/quantitative/{kind_name}-{balloon_name}-{amp_name}-{num_parallel}-i{i}-measurements.csv"
+                )
+                result.timings.to_csv(
+                    f"measurements/quantitative/{kind_name}-{balloon_name}-{amp_name}-{num_parallel}-i{i}-timings.csv"
+                )
+        print(
+            f"Done running measurement with config {{{kind_name=}, {balloon_name=}, {amp_name=}, {num_parallel=}}}",
+            file=stderr,
+        )
+    print(f"Done running quantitative detail measurements", file=stderr)
 
 
 def main():
     paths = Paths()
 
-    os.makedirs("measurements", exist_ok=True)
-
+    measure_quantitative_details(paths)
     measure_qualitative_overview(paths)
 
 
