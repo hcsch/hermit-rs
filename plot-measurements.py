@@ -50,6 +50,8 @@ def plot_rss_measurement(
     ax.get_legend().remove()
 
 
+print("plotting rss measurements overview...")
+
 fig, ax_grid = plt.subplots(
     figsize=(12, 12),
     nrows=len(CONFIGS_KIND) * len(CONFIGS_BALLOON) * len(CONFIGS_AMP),
@@ -73,6 +75,9 @@ for (amp_name, kind, balloon_name), ax_row in zip(
 
 fig.tight_layout()
 fig.savefig(f"measurements/plot.svg")
+
+
+print("plotting rss comparison pairs")
 
 COMPARISON_PAIRS = [
     (
@@ -117,6 +122,9 @@ for comparison_index, (left, right) in enumerate(COMPARISON_PAIRS):
     fig.tight_layout()
     fig.savefig(f"measurements/comparison-{comparison_index}.svg")
 
+
+print("plotting workload execution times")
+
 timings: Optional[pd.DataFrame] = None
 
 for (amp_name, kind, balloon_name), ax_row in zip(
@@ -149,43 +157,41 @@ for (amp_name, kind, balloon_name), ax_row in zip(
         else:
             timings = pd.concat([timings, single_timings])
 
-print(timings)
 
 mean_timings = timings.groupby(
     by=["num_parallel", "with_amp", "kind", "with_balloon"]
 ).mean()
 
-mean_timings["rel_overhead"] = (
-    mean_timings["workload_runtime_s"]
-    / mean_timings.loc[1, "without-amp", "hermit", "without-balloon"][
-        "workload_runtime_s"
-    ]
-    - 1.0
-) * 100.0
-
-fig, ax_grid = plt.subplots(
-    figsize=(6, 8),
+fig, ax_col = plt.subplots(
+    figsize=(5, 8),
     nrows=len(CONFIGS_AMP) * len(CONFIGS_BALLOON),
-    ncols=len(CONFIGS_KIND),
+    ncols=1,
     sharey=True,
     sharex=True,
 )
 
-for (amp_name, balloon_name), ax_row in zip(
+for (amp_name, balloon_name), ax in zip(
     itertools.product(CONFIGS_AMP, CONFIGS_BALLOON),
-    ax_grid,
+    ax_col,
 ):
-    for kind, ax in zip(CONFIGS_KIND, ax_row):
-        ax.set_title(
-            f"{kind} {balloon_name} {amp_name}",
-            loc="left",
-            fontstyle="oblique",
-            fontsize="medium",
-        )
+    ax.set_title(
+        f"{balloon_name} {amp_name}",
+        loc="left",
+        fontstyle="oblique",
+        fontsize="medium",
+    )
 
-        plot = mean_timings["rel_overhead"][:, amp_name, kind, balloon_name].plot(
-            kind="bar", rot=0, grid=True, ylabel="exec time overhead [%]", ax=ax
+    plot = (
+        mean_timings["workload_runtime_s"][:, amp_name, :, balloon_name]
+        .unstack(level="kind")
+        .plot.bar(
+            ylabel="workload runtime [s]",
+            rot=0,
+            color=["tab:orange", "tab:blue"],
+            ax=ax,
         )
+    )
+    plot.legend(loc="upper right", bbox_to_anchor=(1.5, 1.0))
 
 fig.tight_layout()
 fig.savefig(f"measurements/timings.svg")
