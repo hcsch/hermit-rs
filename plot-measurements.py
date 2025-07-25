@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from typing import Optional
+from matplotlib.axes import Axes
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -19,6 +20,36 @@ CONFIGS_BALLOON = ["without-balloon", "with-balloon"]
 CONFIGS_AMP = ["without-amp", "with-amp"]
 CONFIGS_NUM_PARALLEL = [1, 2, 4]
 
+
+def plot_rss_measurement(
+    *, ax: Axes, kind: str, balloon_name: str, amp_name: str, num_parallel: int
+):
+    ax.set_title(
+        f"{kind} ×{num_parallel} {balloon_name} {amp_name}",
+        loc="left",
+        fontstyle="oblique",
+        fontsize="medium",
+    )
+
+    measurements = pd.read_csv(
+        f"measurements/{kind}-{balloon_name}-{amp_name}-{num_parallel}-measurements.csv"
+    )
+    measurements = measurements.set_index(["elapsed_s", "pid"])
+    # Convert RSS from kibibytes to Gibibytes
+    measurements.rss = measurements.rss.astype("float64") / (1024 * 1024)
+
+    measurements["rss"].unstack(level="pid").plot(
+        ax=ax,
+        kind="area",
+        stacked=True,
+        xlabel="t [s]",
+        ylabel="RSS [GiB]",
+        grid=True,
+    )
+
+    ax.get_legend().remove()
+
+
 fig, ax_grid = plt.subplots(
     figsize=(12, 12),
     nrows=len(CONFIGS_KIND) * len(CONFIGS_BALLOON) * len(CONFIGS_AMP),
@@ -31,35 +62,60 @@ for (amp_name, kind, balloon_name), ax_row in zip(
     itertools.product(CONFIGS_AMP, CONFIGS_KIND, CONFIGS_BALLOON),
     ax_grid,
 ):
-    for n, ax in zip(CONFIGS_NUM_PARALLEL, ax_row):
-        ax.set_title(
-            f"{kind} ×{n} {balloon_name} {amp_name}",
-            loc="left",
-            fontstyle="oblique",
-            fontsize="medium",
-        )
-
-        measurements = pd.read_csv(
-            f"measurements/{kind}-{balloon_name}-{amp_name}-{n}-measurements.csv"
-        )
-        measurements = measurements.set_index(["elapsed_s", "pid"])
-        # Convert RSS from kibibytes to Gibibytes
-        measurements.rss = measurements.rss.astype("float64") / (1024 * 1024)
-
-        measurements["rss"].unstack(level="pid").plot(
+    for num_parallel, ax in zip(CONFIGS_NUM_PARALLEL, ax_row):
+        plot_rss_measurement(
             ax=ax,
-            kind="area",
-            stacked=True,
-            xlabel="t [s]",
-            ylabel="RSS [GiB]",
-            grid=True,
+            kind=kind,
+            balloon_name=balloon_name,
+            amp_name=amp_name,
+            num_parallel=num_parallel,
         )
-
-        ax.get_legend().remove()
 
 fig.tight_layout()
 fig.savefig(f"measurements/plot.svg")
 
+COMPARISON_PAIRS = [
+    (
+        ("hermit", "without-balloon", "without-amp", 1),
+        ("hermit", "with-balloon", "without-amp", 1),
+    ),
+    (
+        ("linux", "without-balloon", "without-amp", 1),
+        ("linux", "with-balloon", "without-amp", 1),
+    ),
+    (
+        ("hermit", "with-balloon", "without-amp", 1),
+        ("linux", "with-balloon", "without-amp", 1),
+    ),
+    (
+        ("hermit", "with-balloon", "with-amp", 2),
+        ("hermit", "with-balloon", "without-amp", 4),
+    ),
+]
+
+for comparison_index, (left, right) in enumerate(COMPARISON_PAIRS):
+    fig, ax_row = plt.subplots(
+        figsize=(8, 4),
+        nrows=1,
+        ncols=2,
+        sharey=True,
+        sharex=True,
+    )
+
+    for (kind, balloon_name, amp_name, num_parallel), ax in zip(
+        [left, right],
+        ax_row,
+    ):
+        plot_rss_measurement(
+            ax=ax,
+            kind=kind,
+            balloon_name=balloon_name,
+            amp_name=amp_name,
+            num_parallel=num_parallel,
+        )
+
+    fig.tight_layout()
+    fig.savefig(f"measurements/comparison-{comparison_index}.svg")
 
 timings: Optional[pd.DataFrame] = None
 
