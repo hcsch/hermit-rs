@@ -54,10 +54,29 @@ PS_KEYS = ["pid", "uss", "rss", "pss", "min_flt", "maj_flt", "oom", "oomadj"]
 CONFIGS_NUM_PARALLEL = [1, 2, 4]
 
 
+@dataclass(frozen=True)
+class Paths:
+    nice: Path
+    taskset: Path
+    qemu: Path
+    ps: Path
+
+    def __init__(self):
+        executables = {
+            "qemu": "qemu-system-x86_64",
+            **{n: n for n in ["nice", "taskset", "ps"]},
+        }
+
+        for attribute_name, executable_name in executables.items():
+            path = shutil.which(executable_name)
+            if path is None:
+                raise Exception(f"Could not find {executable_name}")
+            path = Path(path)
+            self.__dict__[attribute_name] = path
+
+
 def start_linux_vm(
-    nice_path: Path,
-    taskset_path: Path,
-    qemu_path: Path,
+    paths: Paths,
     tmp_dir: Path,
     unique_id: int,
     with_balloon: bool,
@@ -67,13 +86,13 @@ def start_linux_vm(
 
     process = subprocess.Popen(
         [
-            nice_path,
+            paths.nice,
             "-n",
             str(NICENESS),
-            taskset_path,
+            paths.taskset,
             "-c",
             f"{1 + unique_id}",
-            qemu_path,
+            paths.qemu,
             *QEMU_COMMON_ARGS,
             *QEMU_LINUX_ARGS,
             *(QEMU_BALLOON_ARGS if with_balloon else []),
@@ -89,9 +108,7 @@ def start_linux_vm(
 
 
 def start_hermit_vm(
-    nice_path: Path,
-    taskset_path: Path,
-    qemu_path: Path,
+    paths: Paths,
     tmp_dir: Path,
     unique_id: int,
     with_balloon: bool,
@@ -99,13 +116,13 @@ def start_hermit_vm(
 
     process = subprocess.Popen(
         [
-            nice_path,
+            paths.nice,
             "-n",
             str(NICENESS),
-            taskset_path,
+            paths.taskset,
             "-c",
             f"{1 + unique_id}",
-            qemu_path,
+            paths.qemu,
             *QEMU_COMMON_ARGS,
             *QEMU_HERMIT_ARGS,
             *(QEMU_BALLOON_ARGS if with_balloon else []),
@@ -146,7 +163,7 @@ def parse_vm_output(pid: int, vm_stdout: bytes) -> pd.DataFrame:
     )
 
 
-StartFn = Callable[[Path, Path, Path, Path, int, bool], subprocess.Popen[bytes]]
+StartFn = Callable[[Paths, Path, int, bool], subprocess.Popen[bytes]]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -156,10 +173,7 @@ class MeasurementResult:
 
 
 def run_measurement(
-    nice_path: Path,
-    taskset_path: Path,
-    qemu_path: Path,
-    ps_path: Path,
+    paths: Paths,
     tmp_dir: Path,
     num_parallel: int,
     start_fn: StartFn,
@@ -179,8 +193,7 @@ def run_measurement(
         measurements: Optional[pd.DataFrame] = None
 
         vm_processes = [
-            start_fn(nice_path, taskset_path, qemu_path, tmp_dir, i, with_balloon)
-            for i in range(num_parallel)
+            start_fn(paths, tmp_dir, i, with_balloon) for i in range(num_parallel)
         ]
 
         while any(map(lambda p: p.poll() is None, vm_processes)):
@@ -197,7 +210,7 @@ def run_measurement(
             # Run ps and artificial-mem-pressure concurrently
             ps_process = subprocess.Popen(
                 [
-                    ps_path,
+                    paths.ps,
                     "--pid",
                     ",".join(map(lambda p: f"{p.pid}", vm_processes)),
                     "-o",
@@ -257,29 +270,10 @@ def run_measurement(
     return MeasurementResult(measurements=measurements, timings=timings)
 
 
-def main():
-    nice_path = shutil.which("nice")
-    if nice_path is None:
-        raise Exception("Could not find nice")
-    nice_path = Path(nice_path)
-
-    taskset_path = shutil.which("taskset")
-    if taskset_path is None:
-        raise Exception("Could not find taskset")
-    taskset_path = Path(taskset_path)
-
-    qemu_path = shutil.which("qemu-system-x86_64")
-    if qemu_path is None:
-        raise Exception("Could not find qemu-system-x86_64")
-    qemu_path = Path(qemu_path)
-
-    ps_path = shutil.which("ps")
-    if ps_path is None:
-        raise Exception("Could not find ps")
-    ps_path = Path(ps_path)
-
-    os.makedirs("measurements", exist_ok=True)
-
+def measure_qualitative_overview(
+    paths: Paths,
+):
+    print(f"Running qualitative overview measurements...", file=stderr)
     for start_fn, name, success_returncode in [
         (start_hermit_vm, "hermit", 3),
         (start_linux_vm, "linux", 0),
@@ -299,10 +293,7 @@ def main():
                     print(f"Running measurement for {n} VMs...", file=stderr)
                     with TemporaryDirectory(suffix="mem-usage-linux") as tmp_dir:
                         result = run_measurement(
-                            nice_path,
-                            taskset_path,
-                            qemu_path,
-                            ps_path,
+                            paths,
                             Path(tmp_dir),
                             n,
                             start_fn,
@@ -321,6 +312,15 @@ def main():
                 print(f"Done running measurements {amp_name}", file=stderr)
             print(f"Done running measurements {balloon_name}", file=stderr)
         print(f"Done running {name} measurements", file=stderr)
+    print(f"Done running qualitative overview measurements", file=stderr)
+
+
+def main():
+    paths = Paths()
+
+    os.makedirs("measurements", exist_ok=True)
+
+    measure_qualitative_overview(paths)
 
 
 if __name__ == "__main__":
