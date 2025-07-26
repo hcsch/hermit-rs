@@ -32,7 +32,7 @@ def plot_rss_measurement(
     )
 
     measurements = pd.read_csv(
-        f"measurements/{kind}-{balloon_name}-{amp_name}-{num_parallel}-measurements.csv"
+        f"measurements/qualitative/{kind}-{balloon_name}-{amp_name}-{num_parallel}-measurements.csv"
     )
     measurements = measurements.set_index(["elapsed_s", "pid"])
     # Convert RSS from kibibytes to Gibibytes
@@ -74,7 +74,7 @@ for (amp_name, kind, balloon_name), ax_row in zip(
         )
 
 fig.tight_layout()
-fig.savefig(f"measurements/plot.svg")
+fig.savefig(f"measurements/plot-qualitative.svg")
 
 
 print("plotting rss comparison pairs")
@@ -125,31 +125,35 @@ for comparison_index, (left, right) in enumerate(COMPARISON_PAIRS):
 
 print("plotting workload execution times")
 
+CONFIGS_FOR_QUANTITATIVE_MEASUREMENTS = [
+    ("hermit", "without-balloon", "without-amp", 1),
+    ("hermit", "with-balloon", "without-amp", 1),
+    ("linux", "without-balloon", "without-amp", 1),
+    ("linux", "with-balloon", "without-amp", 1),
+    ("hermit", "without-balloon", "with-amp", 1),
+    ("hermit", "with-balloon", "with-amp", 1),
+    ("linux", "without-balloon", "with-amp", 1),
+    ("linux", "with-balloon", "with-amp", 1),
+]
+QUANTITATIVE_NUM_SAMPLES = 20
+
 timings: Optional[pd.DataFrame] = None
 
-for (amp_name, kind, balloon_name), ax_row in zip(
-    itertools.product(CONFIGS_AMP, CONFIGS_KIND, CONFIGS_BALLOON),
-    ax_grid,
-):
-    for n, ax in zip(CONFIGS_NUM_PARALLEL, ax_row):
-        ax.set_title(
-            f"{kind} ×{n} {balloon_name} {amp_name}",
-            loc="left",
-            fontstyle="oblique",
-            fontsize="medium",
-        )
-
+for kind, balloon_name, amp_name, num_parallel in CONFIGS_FOR_QUANTITATIVE_MEASUREMENTS:
+    for i in range(QUANTITATIVE_NUM_SAMPLES):
         single_timings = pd.read_csv(
-            f"measurements/{kind}-{balloon_name}-{amp_name}-{n}-timings.csv"
+            f"measurements/quantitative/{kind}-{balloon_name}-{amp_name}-{num_parallel}-i{i}-timings.csv"
         )
 
         single_timings["kind"] = kind
         single_timings["with_balloon"] = balloon_name
         single_timings["with_amp"] = amp_name
-        single_timings["num_parallel"] = n
+        single_timings["num_parallel"] = num_parallel
+        single_timings["i"] = i
+        del single_timings["pid"]
 
         single_timings = single_timings.set_index(
-            ["num_parallel", "with_amp", "kind", "with_balloon", "pid"]
+            ["kind", "with_amp", "with_balloon", "num_parallel", "i"]
         )
 
         if timings is None:
@@ -157,41 +161,32 @@ for (amp_name, kind, balloon_name), ax_row in zip(
         else:
             timings = pd.concat([timings, single_timings])
 
+assert timings is not None
 
-mean_timings = timings.groupby(
-    by=["num_parallel", "with_amp", "kind", "with_balloon"]
-).mean()
+plt.clf()
 
-fig, ax_col = plt.subplots(
-    figsize=(5, 8),
-    nrows=len(CONFIGS_AMP) * len(CONFIGS_BALLOON),
-    ncols=1,
-    sharey=True,
-    sharex=True,
+bplot = timings.unstack(level=["num_parallel", "with_amp", "kind", "with_balloon"])[
+    "workload_runtime_s"
+].boxplot(
+    ylabel="workload runtime [s]", vert=False, patch_artist=True, return_type="dict"
 )
 
-for (amp_name, balloon_name), ax in zip(
-    itertools.product(CONFIGS_AMP, CONFIGS_BALLOON),
-    ax_col,
+plt.xlim(left=0)
+
+for patch, color in zip(
+    bplot["boxes"],
+    [
+        "tab:orange",
+        "tab:orange",
+        "tab:blue",
+        "tab:blue",
+        "tab:orange",
+        "tab:orange",
+        "tab:blue",
+        "tab:blue",
+    ],
 ):
-    ax.set_title(
-        f"{balloon_name} {amp_name}",
-        loc="left",
-        fontstyle="oblique",
-        fontsize="medium",
-    )
+    patch.set_facecolor(color)
 
-    plot = (
-        mean_timings["workload_runtime_s"][:, amp_name, :, balloon_name]
-        .unstack(level="kind")
-        .plot.bar(
-            ylabel="workload runtime [s]",
-            rot=0,
-            color=["tab:orange", "tab:blue"],
-            ax=ax,
-        )
-    )
-    plot.legend(loc="upper right", bbox_to_anchor=(1.5, 1.0))
-
-fig.tight_layout()
-fig.savefig(f"measurements/timings.svg")
+plt.tight_layout()
+plt.savefig(f"measurements/plot-quantitative.svg")
