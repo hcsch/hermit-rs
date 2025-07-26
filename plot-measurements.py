@@ -168,7 +168,7 @@ plt.clf()
 bplot = timings.unstack(level=["num_parallel", "with_amp", "kind", "with_balloon"])[
     "workload_runtime_s"
 ].boxplot(
-    ylabel="workload runtime [s]", vert=False, patch_artist=True, return_type="dict"
+    xlabel="workload runtime [s]", vert=False, patch_artist=True, return_type="dict"
 )
 
 plt.xlim(left=0)
