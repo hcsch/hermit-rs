@@ -25,7 +25,7 @@ def plot_rss_measurement(
     *, ax: Axes, kind: str, balloon_name: str, amp_name: str, num_parallel: int
 ):
     ax.set_title(
-        f"{kind} ×{num_parallel} {balloon_name} {amp_name}",
+        f"{kind} {amp_name} {balloon_name} {num_parallel}×",
         loc="left",
         fontstyle="oblique",
         fontsize="medium",
