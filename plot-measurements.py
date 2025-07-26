@@ -11,6 +11,7 @@ import itertools
 plt.rcParams["svg.fonttype"] = "none"
 plt.rcParams["font.family"] = [
     "NewComputerModernSans10",
+    "New Computer Modern Sans",
     "CMU Sans Serif",
     "sans-serif",
 ]
