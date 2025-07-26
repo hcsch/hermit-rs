@@ -92,10 +92,6 @@ COMPARISON_PAIRS = [
         ("hermit", "with-balloon", "without-amp", 1),
         ("linux", "with-balloon", "without-amp", 1),
     ),
-    (
-        ("hermit", "with-balloon", "with-amp", 2),
-        ("hermit", "with-balloon", "without-amp", 4),
-    ),
 ]
 
 for comparison_index, (left, right) in enumerate(COMPARISON_PAIRS):
