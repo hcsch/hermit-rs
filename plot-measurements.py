@@ -165,7 +165,10 @@ plt.clf()
 bplot = timings.unstack(level=["num_parallel", "with_amp", "kind", "with_balloon"])[
     "workload_runtime_s"
 ].boxplot(
-    xlabel="workload runtime [s]", vert=False, patch_artist=True, return_type="dict"
+    xlabel="workload runtime [s]",
+    vert=False,
+    patch_artist=True,
+    return_type="dict",
 )
 
 plt.xlim(left=0)
@@ -184,6 +187,21 @@ for patch, color in zip(
     ],
 ):
     patch.set_facecolor(color)
+
+for line, color in zip(
+    bplot["medians"],
+    [
+        "tab:cyan",
+        "tab:cyan",
+        "tab:pink",
+        "tab:pink",
+        "tab:cyan",
+        "tab:cyan",
+        "tab:pink",
+        "tab:pink",
+    ],
+):
+    line.set_color(color)
 
 plt.tight_layout()
 plt.savefig(f"measurements/plot-quantitative.svg")
